@@ -1,2 +1,5 @@
-Flask
 discord.py
+flask
+aiohttp
+beautifulsoup4
+requests
