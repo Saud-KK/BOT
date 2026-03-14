@@ -1,1 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bridge Command Center</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="{{ 'online' if data.enabled else 'offline' }}">
+    <div class="container">
+        <div class="status-badge">Bridge {{ 'Online' if data.enabled else 'Offline' }}</div>
+        <h1>Command Center</h1>
+        
+        <div class="msg-card">
+            <div class="user-info">
+                <img src="{{ data.latest_msg.avatar }}" class="avatar" alt="Avatar">
+                <div>
+                    <div class="author">{{ data.latest_msg.author }}</div>
+                    <div style="font-size: 0.7rem; color: gray;">{{ data.latest_msg.time }}</div>
+                </div>
+            </div>
+            <div class="content">{{ data.latest_msg.content }}</div>
+            <div class="reactions">
+                {% for react in data.latest_msg.reactions %}
+                    <span>{{ react }}</span>
+                {% endfor %}
+            </div>
+        </div>
 
+        <a href="/web-toggle" class="btn">{{ 'Disable Bridge' if data.enabled else 'Enable Bridge' }}</a>
+        <div class="footer">Auto-refreshing every 30s • Powered by Python</div>
+    </div>
+    
+    <script>setTimeout(() => { location.reload(); }, 30000);</script>
+</body>
+</html>
