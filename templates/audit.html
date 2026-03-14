@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Server Audit Logs</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="online">
+    <div class="container wide">
+        <a href="/" style="color: gray; text-decoration: none;">← Back to Home</a>
+        <h1>Audit Logs</h1>
+        
+        <form action="/audit" method="get" class="filter-form">
+            <select name="type" onchange="this.form.submit()">
+                <option value="">All Actions</option>
+                <option value="member_kick" {{ 'selected' if current_filter == 'member_kick' }}>Kicks</option>
+                <option value="member_ban" {{ 'selected' if current_filter == 'member_ban' }}>Bans</option>
+                <option value="invite_create" {{ 'selected' if current_filter == 'invite_create' }}>Invites</option>
+                <option value="message_delete" {{ 'selected' if current_filter == 'message_delete' }}>Deletions</option>
+            </select>
+        </form>
+
+        <table class="audit-table">
+            <thead>
+                <tr>
+                    <th>User</th>
+                    <th>Action</th>
+                    <th>Target</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td>{{ log.user }}</td>
+                    <td><span class="action-tag">{{ log.action }}</span></td>
+                    <td>{{ log.target }}</td>
+                    <td>{{ log.time }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
