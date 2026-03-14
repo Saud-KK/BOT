@@ -28,12 +28,37 @@
         </div>
 
         <div class="broadcast-box">
-            <h3>Web Broadcast</h3>
-            <form action="/broadcast" method="post">
-                <input type="text" name="message" placeholder="Type to Target Server..." required>
-                <button type="submit" class="btn small">Send as Bot</button>
+            <h3><i class="icon">🚀</i> Web Broadcaster</h3>
+            <form action="/broadcast" method="post" id="broadcastForm">
+                <div class="mode-selector">
+                    <label>
+                        <input type="radio" name="type" value="plain" checked onclick="toggleFields(false)"> Plain Text
+                    </label>
+                    <label>
+                        <input type="radio" name="type" value="embed" onclick="toggleFields(true)"> Rich Embed
+                    </label>
+                </div>
+        
+                <textarea name="message" placeholder="Message content..." required></textarea>
+        
+                <div id="embedFields" style="display: none;">
+                    <input type="text" name="title" placeholder="Embed Title">
+                    <div class="row">
+                        <input type="color" name="color" value="#00ffff" title="Pick Embed Color">
+                        <input type="text" name="thumbnail" placeholder="Thumbnail URL (optional)">
+                    </div>
+                </div>
+        
+                <button type="submit" class="btn primary">Send to Server</button>
             </form>
         </div>
+        
+        <script>
+        function toggleFields(show) {
+            document.getElementById('embedFields').style.display = show ? 'block' : 'none';
+        }
+        </script>
+        
         <br>
         <a href="/audit" class="btn secondary">View Audit Logs</a>
 
