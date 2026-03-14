@@ -27,6 +27,16 @@
             </div>
         </div>
 
+        <div class="broadcast-box">
+            <h3>Web Broadcast</h3>
+            <form action="/broadcast" method="post">
+                <input type="text" name="message" placeholder="Type to Target Server..." required>
+                <button type="submit" class="btn small">Send as Bot</button>
+            </form>
+        </div>
+        <br>
+        <a href="/audit" class="btn secondary">View Audit Logs</a>
+
         <a href="/web-toggle" class="btn">{{ 'Disable Bridge' if data.enabled else 'Enable Bridge' }}</a>
         <div class="footer">Auto-refreshing every 30s • Powered by Python</div>
     </div>
