@@ -3,9 +3,9 @@ from discord.ext import commands
 from flask import Flask
 from threading import Thread
 import os
-import aiohttp # Required for Webhooks
+import aiohttp
 
-# --- FLASK WEB SERVER ---
+# --- FLASK WEB SERVER (Render/Uptime) ---
 app = Flask('')
 
 @app.route('/')
@@ -25,52 +25,45 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# --- CONFIG FROM ENVIRONMENT ---
+# --- CONFIG ---
 SOURCE_CHANNEL_ID = int(os.environ.get("SOURCE_CHANNEL_ID", 0))
 TARGET_CHANNEL_ID = int(os.environ.get("TARGET_CHANNEL_ID", 0))
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 
 @bot.event
 async def on_ready():
-    print(f'Bridge Active as {bot.user.name}')
+    print(f'Mirror Bridge Active: {bot.user.name}')
 
 @bot.event
 async def on_message(message):
-    # 1. Ignore the bot and webhooks to prevent loops
+    # 1. Prevent infinite loops (Ignore bots and webhooks)
     if message.author.bot or message.webhook_id:
         return
 
-    # 2. Check if message is in the Source Channel
+    # --- DIRECTION 1: Source -> Target (Bot sends normally) ---
     if message.channel.id == SOURCE_CHANNEL_ID:
-        await forward_to_webhook(message)
-
-    # 3. Two-Way: Check if message is in Target Channel (to send back)
-    elif message.channel.id == TARGET_CHANNEL_ID:
-        # For the "Two-Way" part, we'll send it back to the source channel
-        source_channel = bot.get_channel(SOURCE_CHANNEL_ID)
-        if source_channel:
-            # We use a standard message here to avoid needing two webhooks
-            content = f"**{message.author.display_name}**: {message.content}"
+        target_channel = bot.get_channel(TARGET_CHANNEL_ID)
+        if target_channel:
             files = [await a.to_file() for a in message.attachments]
-            await source_channel.send(content=content, files=files)
+            # Bot sends as itself
+            await target_channel.send(content=message.content, files=files)
+
+    # --- DIRECTION 2: Target -> Source (Webhook impersonates users) ---
+    elif message.channel.id == TARGET_CHANNEL_ID:
+        async with aiohttp.ClientSession() as session:
+            webhook = discord.Webhook.from_url(WEBHOOK_URL, session=session)
+            
+            files = [await a.to_file() for a in message.attachments]
+            
+            # Webhook mirrors the Target user's name/avatar into Source
+            await webhook.send(
+                content=message.content,
+                username=message.author.display_name,
+                avatar_url=message.author.display_avatar.url,
+                files=files
+            )
 
     await bot.process_commands(message)
-
-async def forward_to_webhook(message):
-    """Sends the message to the target server using a Webhook."""
-    async with aiohttp.ClientSession() as session:
-        webhook = discord.Webhook.from_url(WEBHOOK_URL, session=session)
-        
-        # Prepare attachments
-        files = [await a.to_file() for a in message.attachments]
-        
-        # Send via Webhook (Impersonates the sender)
-        await webhook.send(
-            content=message.content,
-            username=message.author.display_name,
-            avatar_url=message.author.display_avatar.url,
-            files=files
-        )
 
 # --- START ---
 if __name__ == "__main__":
@@ -78,3 +71,5 @@ if __name__ == "__main__":
     token = os.environ.get("DISCORD_TOKEN")
     if token:
         bot.run(token)
+    else:
+        print("Missing DISCORD_TOKEN.")
