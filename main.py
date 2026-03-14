@@ -75,7 +75,7 @@ async def send_web_msg(msg_type, content, title, color, thumb):
         )
         if thumb and thumb.startswith("http"):
             embed.set_thumbnail(url=thumb)
-        embed.set_footer(text="Sent from Web Dashboard")
+        embed.set_footer(text="AI CHATBOT")
         await target_channel.send(embed=embed)
     else:
         # Fallback to plain text if no embed selected
