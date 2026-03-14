@@ -26,8 +26,8 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # --- CONFIGURATION ---
-MY_USER_ID = 123456789012345678  # Replace with YOUR User ID
-TARGET_CHANNEL_ID = 987654321098765432  # Replace with the Server Channel ID
+MY_USER_ID = 1426556034964783145  # Replace with YOUR User ID
+TARGET_CHANNEL_ID = 1464645768609665067  # Replace with the Server Channel ID
 
 @bot.event
 async def on_ready():
