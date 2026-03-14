@@ -34,11 +34,19 @@ def web_toggle():
 
 @app.route('/broadcast', methods=['POST'])
 def broadcast():
-    msg_content = request.form.get('message')
-    if msg_content:
-        # We must use the bot's event loop to send messages from Flask
+    # Collect all form data
+    msg_type = request.form.get('type') # 'plain' or 'embed'
+    content = request.form.get('message')
+    title = request.form.get('title')
+    color_hex = request.form.get('color', '#00ffff').lstrip('#')
+    thumb = request.form.get('thumbnail')
+
+    if content or title:
+        # Convert hex string to integer for Discord
+        color_int = int(color_hex, 16)
+        
         asyncio.run_coroutine_threadsafe(
-            send_web_msg(msg_content), bot.loop
+            send_web_msg(msg_type, content, title, color_int, thumb), bot.loop
         )
     return redirect(url_for('home'))
 
@@ -54,9 +62,23 @@ def audit_log():
     logs = future.result() # Wait for the bot to return the logs
     return render_template('audit.html', logs=logs, current_filter=filter_type)
 
-async def send_web_msg(content):
+async def send_web_msg(msg_type, content, title, color, thumb):
     target_channel = bot.get_channel(TARGET_CHANNEL_ID)
-    if target_channel:
+    if not target_channel: return
+
+    if msg_type == 'embed':
+        embed = discord.Embed(
+            title=title if title else None,
+            description=content if content else None,
+            color=color,
+            timestamp=datetime.now()
+        )
+        if thumb and thumb.startswith("http"):
+            embed.set_thumbnail(url=thumb)
+        embed.set_footer(text="Sent from Web Dashboard")
+        await target_channel.send(embed=embed)
+    else:
+        # Fallback to plain text if no embed selected
         await target_channel.send(content=content)
 
 async def fetch_audit_logs(filter_type=None):
