@@ -6,7 +6,7 @@ from threading import Thread
 import os
 import aiohttp
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # --- SHARED DATA ---
 bridge_data = {
@@ -25,7 +25,21 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return render_template('index.html', data=bridge_data)
+    # Fetch members for the dropdown
+    future = asyncio.run_coroutine_threadsafe(get_human_members(), bot.loop)
+    members = future.result()
+    return render_template('index.html', data=bridge_data, members=members)
+
+@app.route('/moderate', methods=['POST'])
+def moderate():
+    user_id = request.form.get('user_id')
+    action = request.form.get('action') # 'kick' or 'timeout'
+    
+    if user_id:
+        asyncio.run_coroutine_threadsafe(
+            perform_moderation(user_id, action), bot.loop
+        )
+    return redirect(url_for('home'))
 
 @app.route('/web-toggle')
 def web_toggle():
@@ -34,17 +48,13 @@ def web_toggle():
 
 @app.route('/broadcast', methods=['POST'])
 def broadcast():
-    # Collect all form data
-    msg_type = request.form.get('type') # 'plain' or 'embed'
+    msg_type = request.form.get('type')
     content = request.form.get('message')
     title = request.form.get('title')
     color_hex = request.form.get('color', '#00ffff').lstrip('#')
     thumb = request.form.get('thumbnail')
-
     if content or title:
-        # Convert hex string to integer for Discord
         color_int = int(color_hex, 16)
-        
         asyncio.run_coroutine_threadsafe(
             send_web_msg(msg_type, content, title, color_int, thumb), bot.loop
         )
@@ -52,69 +62,61 @@ def broadcast():
 
 @app.route('/audit')
 def audit_log():
-    # Filter from URL: /audit?type=member_kick
     filter_type = request.args.get('type', None)
-    
-    # Run the async fetcher in the bot's loop
-    future = asyncio.run_coroutine_threadsafe(
-        fetch_audit_logs(filter_type), bot.loop
-    )
-    logs = future.result() # Wait for the bot to return the logs
+    future = asyncio.run_coroutine_threadsafe(fetch_audit_logs(filter_type), bot.loop)
+    logs = future.result()
     return render_template('audit.html', logs=logs, current_filter=filter_type)
+
+# --- ASYNC BOT ACTIONS ---
+
+async def get_human_members():
+    guild = bot.get_guild(int(os.environ.get("GUILD_ID", 0)))
+    if not guild: return []
+    # Returns only humans, sorted by name
+    return sorted([{"id": m.id, "name": m.display_name} for m in guild.members if not m.bot], key=lambda x: x["name"])
+
+async def perform_moderation(user_id, action):
+    guild = bot.get_guild(int(os.environ.get("GUILD_ID", 0)))
+    member = guild.get_member(int(user_id))
+    if not member: return
+
+    try:
+        if action == 'kick':
+            await member.kick(reason="Kicked via Web Dashboard")
+        elif action == 'timeout':
+            # Default 10 minute timeout
+            await member.timeout(timedelta(minutes=10), reason="Timed out via Web Dashboard")
+    except Exception as e:
+        print(f"Moderation Error: {e}")
 
 async def send_web_msg(msg_type, content, title, color, thumb):
     target_channel = bot.get_channel(TARGET_CHANNEL_ID)
     if not target_channel: return
-
     if msg_type == 'embed':
-        embed = discord.Embed(
-            title=title if title else None,
-            description=content if content else None,
-            color=color,
-            timestamp=datetime.now()
-        )
-        if thumb and thumb.startswith("http"):
-            embed.set_thumbnail(url=thumb)
+        embed = discord.Embed(title=title, description=content, color=color, timestamp=datetime.now())
+        if thumb and thumb.startswith("http"): embed.set_thumbnail(url=thumb)
         embed.set_footer(text="AI CHATBOT")
         await target_channel.send(embed=embed)
     else:
-        # Fallback to plain text if no embed selected
         await target_channel.send(content=content)
 
 async def fetch_audit_logs(filter_type=None):
     guild = bot.get_guild(int(os.environ.get("GUILD_ID", 0)))
     if not guild: return []
-    
     logs = []
-    # Fetch last 20 entries
     async for entry in guild.audit_logs(limit=20):
-        # Apply filter if selected
-        if filter_type and entry.action.name != filter_type:
-            continue
-            
-        logs.append({
-            "user": entry.user.display_name,
-            "action": entry.action.name.replace('_', ' ').title(),
-            "target": str(entry.target),
-            "time": entry.created_at.strftime("%b %d, %H:%M")
-        })
+        if filter_type and entry.action.name != filter_type: continue
+        logs.append({"user": entry.user.display_name, "action": entry.action.name.replace('_', ' ').title(), "target": str(entry.target), "time": entry.created_at.strftime("%b %d, %H:%M")})
     return logs
 
-def run():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
-
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
-
-# --- DISCORD BOT LOGIC ---
+# --- DISCORD BOT CORE ---
 class MyBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.reactions = True
-        intents.guilds = True # Needed for Audit Logs
+        intents.guilds = True
+        intents.members = True # CRITICAL for dropdown and moderation
         super().__init__(command_prefix="!", intents=intents)
 
 bot = MyBot()
@@ -131,33 +133,41 @@ async def on_ready():
     print(f'Sync Bridge Active: {bot.user.name}')
 
 @bot.event
+async def on_raw_reaction_add(payload):
+    if payload.user_id != MY_USER_ID: return
+    if payload.channel_id == SOURCE_CHANNEL_ID:
+        if payload.message_id in message_map:
+            target_msg_id = message_map[payload.message_id]
+            target_channel = bot.get_channel(TARGET_CHANNEL_ID)
+            if target_channel:
+                try:
+                    original_msg = await target_channel.fetch_message(target_msg_id)
+                    await original_msg.add_reaction(payload.emoji)
+                except: pass
+
+@bot.event
 async def on_message(message):
     if message.author.bot or message.webhook_id: return
     if not bridge_data["enabled"]: return
 
     bridge_data["latest_msg"] = {
-        "id": message.id,
-        "author": message.author.display_name,
-        "content": message.content if message.content else "[Media]",
-        "avatar": message.author.display_avatar.url,
-        "reactions": [],
-        "time": datetime.now().strftime("%H:%M:%S")
+        "id": message.id, "author": message.author.display_name, "content": message.content or "[Media]",
+        "avatar": message.author.display_avatar.url, "reactions": [], "time": datetime.now().strftime("%H:%M:%S")
     }
 
     if message.channel.id == SOURCE_CHANNEL_ID:
         target_channel = bot.get_channel(TARGET_CHANNEL_ID)
         if target_channel: await target_channel.send(content=message.content)
-
     elif message.channel.id == TARGET_CHANNEL_ID:
         async with aiohttp.ClientSession() as session:
             webhook = discord.Webhook.from_url(WEBHOOK_URL, session=session)
-            mirrored_msg = await webhook.send(
-                content=message.content, username=message.author.display_name,
-                avatar_url=message.author.display_avatar.url, wait=True 
-            )
+            mirrored_msg = await webhook.send(content=message.content, username=message.author.display_name, avatar_url=message.author.display_avatar.url, wait=True)
             message_map[mirrored_msg.id] = message.id
 
+def run():
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
+
 if __name__ == "__main__":
-    keep_alive()
+    Thread(target=run).start()
     token = os.environ.get("DISCORD_TOKEN")
     if token: bot.run(token)
