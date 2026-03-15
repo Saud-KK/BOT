@@ -171,6 +171,30 @@ body.offline { --accent: #ff4b2b; }
 
 .secondary { background: rgba(255,255,255,0.1); color: white; margin-top: 10px; }
 
+.mod-box {
+    margin-top: 20px;
+    padding: 20px;
+    background: rgba(255, 0, 0, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 15px;
+    text-align: left;
+}
+
+.mod-box select {
+    width: 100%;
+    padding: 10px;
+    background: #1a1a1a;
+    color: white;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+.btn.warning { background: #ffa500; color: black; }
+.btn.danger { background: #ff4b2b; color: white; }
+.mod-box .row { display: flex; gap: 10px; }
+.mod-box .row button { flex: 1; padding: 10px; font-size: 0.8rem; }
+
 .filter-form select {
     background: #1a1a1a; color: white; border: 1px solid var(--accent);
     padding: 8px; border-radius: 5px; cursor: pointer;
