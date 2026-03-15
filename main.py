@@ -25,7 +25,6 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    # Fetch members for the dropdown
     future = asyncio.run_coroutine_threadsafe(get_human_members(), bot.loop)
     members = future.result()
     return render_template('index.html', data=bridge_data, members=members)
@@ -33,11 +32,12 @@ def home():
 @app.route('/moderate', methods=['POST'])
 def moderate():
     user_id = request.form.get('user_id')
-    action = request.form.get('action') # 'kick' or 'timeout'
+    action = request.form.get('action') # 'kick', 'timeout', or 'ban'
+    duration = int(request.form.get('duration', 10)) # Default to 10 if missing
     
     if user_id:
         asyncio.run_coroutine_threadsafe(
-            perform_moderation(user_id, action), bot.loop
+            perform_moderation(user_id, action, duration), bot.loop
         )
     return redirect(url_for('home'))
 
@@ -72,20 +72,25 @@ def audit_log():
 async def get_human_members():
     guild = bot.get_guild(int(os.environ.get("GUILD_ID", 0)))
     if not guild: return []
-    # Returns only humans, sorted by name
     return sorted([{"id": m.id, "name": m.display_name} for m in guild.members if not m.bot], key=lambda x: x["name"])
 
-async def perform_moderation(user_id, action):
+async def perform_moderation(user_id, action, duration=10):
     guild = bot.get_guild(int(os.environ.get("GUILD_ID", 0)))
-    member = guild.get_member(int(user_id))
-    if not member: return
-
+    if not guild: return
+    
     try:
-        if action == 'kick':
-            await member.kick(reason="Kicked via Web Dashboard")
-        elif action == 'timeout':
-            # Default 10 minute timeout
-            await member.timeout(timedelta(minutes=10), reason="Timed out via Web Dashboard")
+        if action == 'ban':
+            # discord.Object allows us to ban users even if they aren't currently in the server cache
+            user = discord.Object(id=int(user_id))
+            await guild.ban(user, reason="Banned via Bridge/Dashboard")
+        else:
+            member = guild.get_member(int(user_id))
+            if not member: return
+            
+            if action == 'kick':
+                await member.kick(reason="Kicked via Bridge/Dashboard")
+            elif action == 'timeout':
+                await member.timeout(timedelta(minutes=duration), reason="Timed out via Bridge/Dashboard")
     except Exception as e:
         print(f"Moderation Error: {e}")
 
@@ -116,7 +121,7 @@ class MyBot(commands.Bot):
         intents.message_content = True
         intents.reactions = True
         intents.guilds = True
-        intents.members = True # CRITICAL for dropdown and moderation
+        intents.members = True 
         super().__init__(command_prefix="!", intents=intents)
 
 bot = MyBot()
@@ -131,6 +136,39 @@ message_map = {}
 @bot.event
 async def on_ready():
     print(f'Sync Bridge Active: {bot.user.name}')
+
+# --- COMMANDS (Sync & Target Mod) ---
+
+@bot.command()
+async def sync(ctx):
+    if ctx.author.id == MY_USER_ID:
+        await bot.tree.sync()
+        await ctx.send("✅ Slash commands synced!")
+
+@bot.tree.command(name="tmod", description="Moderate a user in the target server")
+@app_commands.describe(action="Select Action", user_id="User ID", duration="Timeout duration in minutes")
+@app_commands.choices(action=[
+    app_commands.Choice(name="Timeout", value="timeout"),
+    app_commands.Choice(name="Kick", value="kick"),
+    app_commands.Choice(name="Ban", value="ban")
+])
+async def tmod(interaction: discord.Interaction, action: app_commands.Choice[str], user_id: str, duration: int = 10):
+    if interaction.user.id != MY_USER_ID:
+        return await interaction.response.send_message("Unauthorized", ephemeral=True)
+    
+    await perform_moderation(user_id, action.value, duration)
+    await interaction.response.send_message(f"✅ Successfully executed `{action.name}` on ID: {user_id}", ephemeral=True)
+
+@bot.tree.command(name="toggle", description="Turn bridge ON/OFF (Private)")
+async def toggle(interaction: discord.Interaction):
+    if interaction.user.id != MY_USER_ID:
+        await interaction.response.send_message("Unauthorized", ephemeral=True)
+        return
+    bridge_data["enabled"] = not bridge_data["enabled"]
+    status = "ENABLED" if bridge_data["enabled"] else "DISABLED"
+    await interaction.response.send_message(f"Bridge is now {status}", ephemeral=True)
+
+# --- EVENTS ---
 
 @bot.event
 async def on_raw_reaction_add(payload):
@@ -148,6 +186,8 @@ async def on_raw_reaction_add(payload):
 @bot.event
 async def on_message(message):
     if message.author.bot or message.webhook_id: return
+    await bot.process_commands(message) # Required to process the !sync command
+    
     if not bridge_data["enabled"]: return
 
     bridge_data["latest_msg"] = {
