@@ -27,6 +27,22 @@
             </div>
         </div>
 
+        <div class="mod-box">
+            <h3>🛡️ Quick Moderation</h3>
+            <form action="/moderate" method="post">
+                <select name="user_id" required>
+                    <option value="" disabled selected>Select User...</option>
+                    {% for member in members %}
+                        <option value="{{ member.id }}">{{ member.name }}</option>
+                    {% endfor %}
+                </select>
+                <div class="row">
+                    <button type="submit" name="action" value="timeout" class="btn warning">Timeout (10m)</button>
+                    <button type="submit" name="action" value="kick" class="btn danger">Kick User</button>
+                </div>
+            </form>
+        </div>
+
         <div class="broadcast-box">
             <h3><i class="icon">🚀</i> Web Broadcaster</h3>
             <form action="/broadcast" method="post" id="broadcastForm">
