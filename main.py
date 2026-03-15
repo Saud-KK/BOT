@@ -142,8 +142,17 @@ async def on_ready():
 @bot.command()
 async def sync(ctx):
     if ctx.author.id == MY_USER_ID:
-        await bot.tree.sync()
-        await ctx.send("✅ Slash commands synced!")
+        guild_id = os.environ.get("GUILD_ID")
+        if guild_id:
+            guild = discord.Object(id=int(guild_id))
+            # This copies the /tmod and /toggle commands to your specific server
+            bot.tree.copy_global_to(guild=guild)
+            synced = await bot.tree.sync(guild=guild)
+            await ctx.send(f"✅ Synced {len(synced)} commands to Guild ID: {guild_id}")
+        else:
+            # Fallback to global sync if no Guild ID is found
+            synced = await bot.tree.sync()
+            await ctx.send(f"🌍 Global sync triggered. (May take 1 hour to appear).")
 
 @bot.tree.command(name="tmod", description="Moderate a user in the target server")
 @app_commands.describe(action="Select Action", user_id="User ID", duration="Timeout duration in minutes")
