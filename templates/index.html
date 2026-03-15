@@ -36,9 +36,13 @@
                         <option value="{{ member.id }}">{{ member.name }}</option>
                     {% endfor %}
                 </select>
-                <div class="row">
-                    <button type="submit" name="action" value="timeout" class="btn warning">Timeout (10m)</button>
-                    <button type="submit" name="action" value="kick" class="btn danger">Kick User</button>
+                
+                <input type="number" name="duration" placeholder="Timeout Duration (Minutes)" value="10" min="1" class="duration-input">
+                
+                <div class="row mod-buttons">
+                    <button type="submit" name="action" value="timeout" class="btn warning">Timeout</button>
+                    <button type="submit" name="action" value="kick" class="btn danger">Kick</button>
+                    <button type="submit" name="action" value="ban" class="btn fatal">Ban</button>
                 </div>
             </form>
         </div>
